@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FORMATme — конвертация файлов в браузере</title>
+    <meta
+      name="description"
+      content="Конвертируйте файлы прямо в браузере. Без облака, без регистрации, без отправки данных на сервер."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="header-inner">
+          <a class="brand" href="#" aria-label="FORMATme">
+            <span class="brand-mark" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M20 7h-3a2 2 0 0 1-2-2V2"></path>
+                <path
+                  d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"
+                ></path>
+                <path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"></path>
+              </svg>
+            </span>
+            <span class="brand-name">FORMATme</span>
+          </a>
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            aria-label="Переключить тему"
+            title="Переключить тему"
+          >
+            <svg
+              class="icon-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+            <svg
+              class="icon-moon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="container">
+          <section class="hero">
+            <h1>FORMATme</h1>
+            <p class="subtitle">
+              Конвертируйте файлы прямо в браузере. Без облака, без регистрации,
+              без отправки данных на сервер.
+            </p>
+          </section>
+
+          <section id="upload-panel" class="panel">
+            <div
+              id="dropzone"
+              class="dropzone"
+              role="button"
+              tabindex="0"
+              aria-label="Выбрать или перетащить файл"
+            >
+              <div class="dropzone-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </div>
+              <p class="dropzone-title">
+                Перетащите файл сюда или&nbsp;<span class="accent"
+                  >выберите</span
+                >
+              </p>
+              <p class="dropzone-hint">
+                Конвертация происходит локально в браузере — файл никуда не
+                отправляется
+              </p>
+              <button id="pick-button" class="btn btn-lg" type="button">
+                Выбрать файл
+              </button>
+              <input
+                id="file-input"
+                type="file"
+                hidden
+                accept="image/*,.pdf,.docx,.txt,.html,.htm,.rtf,.odt,audio/*,video/*"
+              />
+            </div>
+
+            <div id="selected-card" class="card selected-card" hidden>
+              <div class="selected-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"
+                  ></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+              </div>
+              <div class="selected-meta">
+                <p id="file-name" class="selected-name"></p>
+                <p id="file-size" class="selected-size"></p>
+              </div>
+              <button
+                id="remove-file"
+                class="icon-btn"
+                type="button"
+                aria-label="Удалить файл"
+                title="Удалить файл"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </section>
+
+          <section id="selector" class="panel selector" hidden>
+            <div class="selector-label">
+              <span>Доступные действия конвертации</span>
+              <svg
+                class="arrow"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+            </div>
+
+            <div id="categories" class="categories"></div>
+
+            <div class="format-row">
+              <div class="field">
+                <label for="source-select">Исходный формат</label>
+                <select id="source-select" class="select"></select>
+              </div>
+              <svg
+                class="arrow arrow-mid"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+              <div class="field">
+                <label for="target-select">Целевой формат</label>
+                <select id="target-select" class="select"></select>
+              </div>
+            </div>
+
+            <div id="progress-wrap" class="progress-wrap" hidden>
+              <div class="progress-header">
+                <span>Конвертация…</span>
+                <span id="progress-label">0%</span>
+              </div>
+              <div class="progress-track">
+                <div id="progress-bar" class="progress-bar"></div>
+              </div>
+            </div>
+
+            <div id="result" class="result" hidden>
+              <button id="download-button" class="btn btn-lg btn-primary">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span id="download-label">Скачать</span>
+              </button>
+              <span class="result-note">
+                Файл готов и хранится только на вашем устройстве
+              </span>
+            </div>
+
+            <button id="convert-button" class="btn btn-lg" type="button">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                <path d="M21 3v6h-6"></path>
+              </svg>
+              Конвертировать
+            </button>
+
+            <div id="toast" class="toast" role="status" hidden></div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <p>
+            © <span id="footer-year"></span> FORMATme ·
+            <a
+              href="https://github.com/Dmitry-prg"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="footer-link"
+              >Dmitry Davydov</a
+            >
+          </p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
