@@ -14,8 +14,19 @@
     {
       id: "document",
       label: "Документы",
-      description: "PDF, DOCX, TXT и другие",
-      formats: ["pdf", "docx", "txt", "html", "rtf", "odt"],
+      description: "PDF, DOCX, TXT, таблицы и другие",
+      formats: [
+        "pdf",
+        "docx",
+        "odt",
+        "doc",
+        "xlsx",
+        "csv",
+        "txt",
+        "html",
+        "rtf",
+        "md",
+      ],
     },
     {
       id: "audio",
@@ -40,10 +51,14 @@
     tiff: "TIFF",
     pdf: "PDF",
     docx: "DOCX",
+    odt: "ODT",
+    doc: "DOC",
+    xlsx: "XLSX",
+    csv: "CSV",
     txt: "TXT",
     html: "HTML",
     rtf: "RTF",
-    odt: "ODT",
+    md: "MD",
     mp3: "MP3",
     wav: "WAV",
     ogg: "OGG",
@@ -68,9 +83,25 @@
   }
 
   var conversionsCache = {};
+  // Пары конвертации текстовых и офисных документов перечислены явно.
+  var DOCUMENT_CONVERSIONS = {
+    pdf: ["txt", "html", "rtf", "md"],
+    docx: ["txt", "html", "rtf", "md", "odt"],
+    odt: ["txt", "html", "rtf", "md", "doc"],
+    doc: ["txt", "html", "rtf", "md", "odt"],
+    xlsx: ["csv", "html", "txt"],
+    csv: ["xlsx", "html", "txt"],
+    txt: ["html", "rtf", "md", "odt", "doc", "csv"],
+    html: ["txt", "rtf", "md", "odt", "doc"],
+    rtf: ["txt", "html", "md", "odt", "doc"],
+    md: ["txt", "html", "rtf", "odt", "doc"],
+  };
   function getConversions(category) {
     if (!conversionsCache[category.id]) {
-      conversionsCache[category.id] = conversionsFor(category.formats);
+      conversionsCache[category.id] =
+        category.id === "document"
+          ? DOCUMENT_CONVERSIONS
+          : conversionsFor(category.formats);
     }
     return conversionsCache[category.id];
   }
@@ -100,11 +131,16 @@
     tif: ["image", "tiff"],
     pdf: ["document", "pdf"],
     docx: ["document", "docx"],
+    odt: ["document", "odt"],
+    doc: ["document", "doc"],
+    xlsx: ["document", "xlsx"],
+    csv: ["document", "csv"],
     txt: ["document", "txt"],
     html: ["document", "html"],
     htm: ["document", "html"],
     rtf: ["document", "rtf"],
-    odt: ["document", "odt"],
+    md: ["document", "md"],
+    markdown: ["document", "md"],
     mp3: ["audio", "mp3"],
     wav: ["audio", "wav"],
     ogg: ["audio", "ogg"],
@@ -126,6 +162,14 @@
     "image/bmp": "bmp",
     "image/tiff": "tiff",
     "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      "docx",
+    "application/vnd.oasis.opendocument.text": "odt",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/csv": "csv",
+    "application/csv": "csv",
+    "text/markdown": "md",
     "text/plain": "txt",
     "text/html": "html",
     "application/rtf": "rtf",
@@ -256,51 +300,934 @@
       .replace(/'/g, "&#39;");
   }
 
-  function convertDocument(file, source, target) {
-    if (source !== "txt") {
-      return Promise.reject(
-        new Error(
-          "Чтение документов этого формата на устройстве пока недоступно. Откройте файл в редакторе и сохраните как TXT."
-        )
-      );
-    }
-    if (target === "txt") {
-      return Promise.resolve(new Blob([file], { type: MIME_TYPE.txt }));
-    }
-    return file.text().then(function (text) {
-      if (target === "html") {
-        var html =
-          '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n<title>' +
-          escapeHtml(file.name) +
-          "</title>\n</head>\n<body>\n" +
-          text
-            .split(/\r?\n/)
-            .map(function (line) {
-              return "<p>" + escapeHtml(line) + "</p>";
-            })
-            .join("\n") +
-          "\n</body>\n</html>";
-        return new Blob([html], { type: MIME_TYPE.html });
+  /* ------------------------------------------------------------------ *
+   * Движок конвертации документов (полностью локально в браузере)
+   * PDF / DOCX / ODT / TXT / HTML / RTF / MD / CSV / XLSX
+   * ------------------------------------------------------------------ */
+  function utf8Decode(bytes) {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  // Точное 1:1 декодирование байтов в Latin-1 (без искажений windows-1252).
+  function latinDecode(bytes) {
+    var out = "";
+    for (var i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+    return out;
+  }
+
+  function inflateStream(kind, data) {
+    return new Response(
+      new Blob([data]).stream().pipeThrough(new DecompressionStream(kind))
+    )
+      .arrayBuffer()
+      .then(function (buf) {
+        return new Uint8Array(buf);
+      });
+  }
+  function inflateRaw(data) {
+    return inflateStream("deflate-raw", data);
+  }
+  function inflateDeflate(data) {
+    return inflateStream("deflate", data);
+  }
+
+  async function unzip(bytes) {
+    var len = bytes.length;
+    var eocd = -1;
+    for (var i = len - 22; i >= 0; i--) {
+      if (
+        bytes[i] === 0x50 &&
+        bytes[i + 1] === 0x4b &&
+        bytes[i + 2] === 0x05 &&
+        bytes[i + 3] === 0x06
+      ) {
+        eocd = i;
+        break;
       }
-      if (target === "rtf") {
-        var escaped = text
-          .replace(/\\/g, "\\\\")
-          .replace(/\{/g, "\\{")
-          .replace(/\}/g, "\\}")
-          .replace(/\n/g, "\\par\n")
-          .replace(/\r/g, "");
-        var rtf =
-          "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24\n" +
-          escaped +
-          "\n}";
-        return new Blob([rtf], { type: MIME_TYPE.rtf });
+    }
+    if (eocd < 0) throw new Error("Файл не является ZIP-архивом.");
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var cdOffset = view.getUint32(eocd + 16, true);
+    var entries = {};
+    var pos = cdOffset;
+    for (;;) {
+      if (pos + 46 > len) break;
+      if (
+        bytes[pos] !== 0x50 ||
+        bytes[pos + 1] !== 0x4b ||
+        bytes[pos + 2] !== 0x01 ||
+        bytes[pos + 3] !== 0x02
+      )
+        break;
+      var method = view.getUint16(pos + 10, true);
+      var compSize = view.getUint32(pos + 20, true);
+      var nameLen = view.getUint16(pos + 28, true);
+      var extraLen = view.getUint16(pos + 30, true);
+      var commentLen = view.getUint16(pos + 32, true);
+      var localOffset = view.getUint32(pos + 42, true);
+      var name = utf8Decode(bytes.subarray(pos + 46, pos + 46 + nameLen));
+      var data = new Uint8Array(0);
+      if (name.slice(-1) !== "/") {
+        var lname = view.getUint16(localOffset + 26, true);
+        var lextra = view.getUint16(localOffset + 28, true);
+        var dataStart = localOffset + 30 + lname + lextra;
+        var raw = bytes.subarray(dataStart, dataStart + compSize);
+        data = method === 8 ? await inflateRaw(raw) : new Uint8Array(raw);
       }
-      throw new Error(
-        "Сохранение документа в формат " +
-          target.toUpperCase() +
-          " на устройстве пока не поддерживается."
-      );
+      entries[name] = data;
+      pos += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+
+  var CRC_TABLE = (function () {
+    var table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(data) {
+    var crc = 0xffffffff;
+    for (var i = 0; i < data.length; i++) {
+      crc = CRC_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function zip(parts) {
+    var chunks = [];
+    var central = [];
+    var offset = 0;
+    parts.forEach(function (part) {
+      var nameBytes = new TextEncoder().encode(part.name);
+      var crc = crc32(part.data);
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      local[0] = 0x50;
+      local[1] = 0x4b;
+      local[2] = 0x03;
+      local[3] = 0x04;
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, 0, true);
+      lv.setUint16(12, 0x21, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, part.data.length, true);
+      lv.setUint32(22, part.data.length, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      chunks.push(local, part.data);
+
+      var cd = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(cd.buffer);
+      cd[0] = 0x50;
+      cd[1] = 0x4b;
+      cd[2] = 0x01;
+      cd[3] = 0x02;
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, 0, true);
+      cv.setUint16(14, 0x21, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, part.data.length, true);
+      cv.setUint32(24, part.data.length, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(42, offset, true);
+      cd.set(nameBytes, 46);
+      central.push(cd);
+      offset += local.length + part.data.length;
     });
+
+    var cdSize = 0;
+    central.forEach(function (c) {
+      cdSize += c.length;
+    });
+    var eocd = new Uint8Array(22);
+    var ev = new DataView(eocd.buffer);
+    eocd[0] = 0x50;
+    eocd[1] = 0x4b;
+    eocd[2] = 0x05;
+    eocd[3] = 0x06;
+    ev.setUint16(8, parts.length, true);
+    ev.setUint16(10, parts.length, true);
+    ev.setUint32(12, cdSize, true);
+    ev.setUint32(16, offset, true);
+
+    var all = chunks.concat(central, [eocd]);
+    var total = 0;
+    all.forEach(function (c) {
+      total += c.length;
+    });
+    var out = new Uint8Array(total);
+    var p = 0;
+    all.forEach(function (c) {
+      out.set(c, p);
+      p += c.length;
+    });
+    return new Blob([out], { type: "application/zip" });
+  }
+
+  /* -- текстовые преобразования -- */
+  function normalizeLines(lines) {
+    var result = [];
+    lines.forEach(function (line) {
+      var trimmed = line.trim();
+      if (trimmed === "") {
+        if (result.length && result[result.length - 1] !== "") result.push("");
+      } else {
+        result.push(trimmed);
+      }
+    });
+    while (result.length && result[result.length - 1] === "") result.pop();
+    return result.join("\n").trim();
+  }
+
+  function stripHtml(value) {
+    return normalizeLines(
+      String(value)
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<br\s*\/?\s*>/gi, "\n")
+        .replace(/<\/(p|div|h[1-6]|li|tr|pre)>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .split(/\r?\n/)
+    );
+  }
+
+  function textToHtml(text, title) {
+    var paragraphs = text
+      .split(/\r?\n/)
+      .map(function (line) {
+        return "<p>" + escapeHtml(line) + "</p>";
+      })
+      .join("\n");
+    return (
+      '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n<title>' +
+      escapeHtml(title) +
+      "</title>\n</head>\n<body>\n" +
+      paragraphs +
+      "\n</body>\n</html>"
+    );
+  }
+
+  function textToRtf(text) {
+    var escaped = text
+      .replace(/\\/g, "\\\\")
+      .replace(/\{/g, "\\{")
+      .replace(/\}/g, "\\}")
+      .replace(/\n/g, "\\par\n")
+      .replace(/\r/g, "");
+    return (
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24\n" +
+      escaped +
+      "\n}"
+    );
+  }
+
+  function rtfToText(rtf) {
+    var value = String(rtf);
+    var out = "";
+    var i = 0;
+    var n = value.length;
+    var depth = 0;
+    var skipDepth = -1;
+    while (i < n) {
+      var ch = value[i];
+      if (ch === "{") {
+        depth++;
+        if (
+          skipDepth < 0 &&
+          /^\{\\(?:fonttbl|colortbl|stylesheet|info|generator)\b/i.test(
+            value.slice(i)
+          )
+        ) {
+          skipDepth = depth;
+        }
+        i++;
+        continue;
+      }
+      if (ch === "}") {
+        if (skipDepth === depth) skipDepth = -1;
+        depth--;
+        i++;
+        continue;
+      }
+      if (skipDepth >= 0) {
+        i++;
+        continue;
+      }
+      if (ch === "\\") {
+        i++;
+        if (i >= n) break;
+        var c = value[i];
+        if (c === "'") {
+          var code = parseInt(value.slice(i + 1, i + 3), 16);
+          out += isNaN(code) ? "" : String.fromCharCode(code);
+          i += 3;
+          continue;
+        }
+        if (c === "\\" || c === "{" || c === "}") {
+          out += c;
+          i++;
+          continue;
+        }
+        if (/[a-zA-Z]/.test(c)) {
+          var start = i;
+          while (i < n && /[a-zA-Z]/.test(value[i])) i++;
+          var word = value.slice(start, i);
+          if (word === "par" || word === "line" || word === "ltrpar")
+            out += "\n";
+          else if (word === "tab") out += "\t";
+          if (value[i] === "-") i++;
+          while (i < n && /\d/.test(value[i])) i++;
+          if (value[i] === " ") i++;
+          continue;
+        }
+        i++;
+        continue;
+      }
+      if (ch === "\r") {
+        i++;
+        continue;
+      }
+      out += ch;
+      i++;
+    }
+    return normalizeLines(out.split(/\r?\n/));
+  }
+
+  function inlineMarkdown(value) {
+    var out = escapeHtml(value);
+    out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+    out = out.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>');
+    return out;
+  }
+
+  function markdownToHtml(markdown) {
+    var html = [];
+    var listOpen = false;
+    function closeList() {
+      if (listOpen) {
+        html.push("</ul>");
+        listOpen = false;
+      }
+    }
+    String(markdown)
+      .split(/\r?\n/)
+      .forEach(function (raw) {
+        var line = raw.replace(/\s+$/, "");
+        if (/^\s*[-*+]\s+/.test(line)) {
+          if (!listOpen) {
+            html.push("<ul>");
+            listOpen = true;
+          }
+          html.push(
+            "<li>" + inlineMarkdown(line.replace(/^\s*[-*+]\s+/, "")) + "</li>"
+          );
+          return;
+        }
+        if (/^\s{0,3}\d+\.\s+/.test(line)) {
+          closeList();
+          html.push(
+            "<ol><li>" +
+              inlineMarkdown(line.replace(/^\s*\d+\.\s+/, "")) +
+              "</li></ol>"
+          );
+          return;
+        }
+        closeList();
+        var heading = /^(#{1,6})\s+(.*)$/.exec(line);
+        if (heading) {
+          html.push(
+            "<h" +
+              heading[1].length +
+              ">" +
+              inlineMarkdown(heading[2]) +
+              "</h" +
+              heading[1].length +
+              ">"
+          );
+          return;
+        }
+        if (/^```/.test(line)) {
+          closeList();
+          html.push("<pre><code>");
+          return;
+        }
+        if (html.length && html[html.length - 1] === "<pre><code>") {
+          if (/^```$/.test(line)) {
+            html.push("</code></pre>");
+            return;
+          }
+          html.push(escapeHtml(line));
+          return;
+        }
+        if (line.trim() === "") return;
+        if (/^\s*---+$/.test(line)) {
+          html.push("<hr />");
+          return;
+        }
+        html.push("<p>" + inlineMarkdown(line) + "</p>");
+      });
+    closeList();
+    return html.join("\n");
+  }
+
+  function markdownToText(markdown) {
+    return normalizeLines(
+      String(markdown)
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^\s{0,3}\d+\.\s+/gm, "")
+        .replace(/^\s*[-*+]\s+/gm, "")
+        .replace(/^```/gm, "")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, "$1")
+        .replace(/!?\[([^\]]*)\]\(([^)]+)\)/g, "$2")
+        .split(/\r?\n/)
+    );
+  }
+
+  function textToMarkdown(text) {
+    return normalizeLines(String(text).split(/\r?\n/));
+  }
+
+  function textToMarkdown(text) {
+    return String(text)
+      .split(/\r?\n/)
+      .map(function (line) {
+        return line.trim();
+      })
+      .filter(function (line, index, arr) {
+        return !(line === "" && arr[index - 1] === "");
+      })
+      .join("\n");
+  }
+
+  /* -- XML/OOXML -- */
+  function escapeXml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function xmlBodyToText(xml) {
+    return normalizeLines(
+      String(xml)
+        .replace(/<(w:text|text:p|text:h)\b[^>]*\/?>/gi, "\n")
+        .replace(/<\/w:p>/gi, "\n")
+        .replace(/<\/text:(p|h)>/gi, "\n")
+        .replace(/<\/w:tr>/gi, "\n")
+        .replace(/<\/text:table-row>/gi, "\n")
+        .replace(/<\/w:tc>/gi, "\t")
+        .replace(/<\/text:table-cell>/gi, "\t")
+        .replace(/<(w:tab|text:tab)\b[^>]*\/?>/gi, "\t")
+        .replace(/<w:br[^>]*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .split(/\r?\n/)
+    );
+  }
+
+  async function docxToText(bytes) {
+    var files = await unzip(bytes);
+    var xml = files["word/document.xml"];
+    if (!xml)
+      throw new Error("Архив DOCX повреждён: не найден word/document.xml.");
+    var text = xmlBodyToText(utf8Decode(xml));
+    if (!text.trim()) throw new Error("Не удалось извлечь текст из DOCX.");
+    return text;
+  }
+
+  async function odtToText(bytes) {
+    var files = await unzip(bytes);
+    var xml = files["content.xml"];
+    if (!xml) throw new Error("Архив ODT повреждён: не найден content.xml.");
+    var text = xmlBodyToText(utf8Decode(xml));
+    if (!text.trim()) throw new Error("Не удалось извлечь текст из ODT.");
+    return text;
+  }
+
+  /* -- генерация офисных форматов -- */
+  function buildOdt(text) {
+    var paragraphs = String(text)
+      .split(/\r?\n/)
+      .map(function (line) {
+        return "<text:p>" + escapeXml(line) + "</text:p>";
+      })
+      .join("\n");
+    var contentXml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2">\n' +
+      "<office:body><office:text>" +
+      paragraphs +
+      "</office:text></office:body>\n</office:document-content>";
+    var manifest =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">\n' +
+      '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text" manifest:version="1.2"/>\n' +
+      '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>\n</manifest:manifest>';
+    var mimetype = new TextEncoder().encode(
+      "application/vnd.oasis.opendocument.text"
+    );
+    return zip([
+      { name: "mimetype", data: mimetype },
+      { name: "content.xml", data: new TextEncoder().encode(contentXml) },
+      {
+        name: "META-INF/manifest.xml",
+        data: new TextEncoder().encode(manifest),
+      },
+    ]);
+  }
+
+  function buildDocx(title, text) {
+    var paragraphs = String(text)
+      .split(/\r?\n/)
+      .map(function (line) {
+        return (
+          '<w:p><w:r><w:t xml:space="preserve">' +
+          escapeXml(line) +
+          "</w:t></w:r></w:p>"
+        );
+      })
+      .join("\n");
+    var docXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+      paragraphs +
+      "</w:body></w:document>";
+    var contentTypes =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      "</Types>";
+    var rels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      "</Relationships>";
+    var docRels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+    return zip([
+      {
+        name: "[Content_Types].xml",
+        data: new TextEncoder().encode(contentTypes),
+      },
+      { name: "_rels/.rels", data: new TextEncoder().encode(rels) },
+      {
+        name: "word/_rels/document.xml.rels",
+        data: new TextEncoder().encode(docRels),
+      },
+      { name: "word/document.xml", data: new TextEncoder().encode(docXml) },
+    ]);
+  }
+
+  /* -- CSV / XLSX -- */
+  function parseCsv(csv) {
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    var s = String(csv);
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (s[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        row.push(field);
+        field = "";
+      } else if (ch === "\n") {
+        row.push(field);
+        field = "";
+        if (
+          row.some(function (cell) {
+            return cell.trim() !== "";
+          })
+        )
+          rows.push(row);
+        row = [];
+      } else if (ch !== "\r") {
+        field += ch;
+      }
+    }
+    if (field !== "" || row.length > 0) {
+      row.push(field);
+      if (
+        row.some(function (cell) {
+          return cell.trim() !== "";
+        })
+      )
+        rows.push(row);
+    }
+    return rows;
+  }
+
+  function csvCell(value) {
+    var v = String(value);
+    if (/[",\n\r]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }
+
+  function tableToCsv(rows) {
+    return rows
+      .map(function (row) {
+        return row.map(csvCell).join(",");
+      })
+      .join("\n");
+  }
+
+  function buildXlsx(rows) {
+    var sheetRows = rows
+      .map(function (row) {
+        var cells = row
+          .map(function (cell) {
+            return (
+              '<c t="inlineStr"><is><t xml:space="preserve">' +
+              escapeXml(cell) +
+              "</t></is></c>"
+            );
+          })
+          .join("");
+        return "<row>" + cells + "</row>";
+      })
+      .join("");
+    var sheetXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      sheetRows +
+      "</sheetData></worksheet>";
+    var workbookXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var contentTypes =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      "</Types>";
+    var rels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      "</Relationships>";
+    var workbookRels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      "</Relationships>";
+    return zip([
+      {
+        name: "[Content_Types].xml",
+        data: new TextEncoder().encode(contentTypes),
+      },
+      { name: "_rels/.rels", data: new TextEncoder().encode(rels) },
+      { name: "xl/workbook.xml", data: new TextEncoder().encode(workbookXml) },
+      {
+        name: "xl/_rels/workbook.xml.rels",
+        data: new TextEncoder().encode(workbookRels),
+      },
+      {
+        name: "xl/worksheets/sheet1.xml",
+        data: new TextEncoder().encode(sheetXml),
+      },
+    ]);
+  }
+
+  function colIndex(ref) {
+    var result = 0;
+    for (var i = 0; i < ref.length; i++) {
+      result = result * 26 + (ref.charCodeAt(i) - 64);
+    }
+    return result;
+  }
+
+  async function xlsxToGrid(bytes) {
+    var files = await unzip(bytes);
+    var shared = [];
+    var sharedXml = files["xl/sharedStrings.xml"];
+    if (sharedXml) {
+      var sharedText = utf8Decode(sharedXml);
+      var siRe = /<si>[\s\S]*?<\/si>/g;
+      var m;
+      while ((m = siRe.exec(sharedText)) !== null) {
+        var t = m[0].match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [];
+        shared.push(
+          t
+            .map(function (x) {
+              return x
+                .replace(/<[^>]+>/g, "")
+                .replace(/&amp;/g, "&")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">");
+            })
+            .join("")
+        );
+      }
+    }
+    var sheet =
+      files["xl/worksheets/sheet1.xml"] || files["xl/worksheets/sheet.xml"];
+    if (!sheet) throw new Error("Не удалось найти таблицу в XLSX.");
+    var sheetText = utf8Decode(sheet);
+    var grid = [];
+    var rowRe = /<row[^>]*>([\s\S]*?)<\/row>/g;
+    var rMatch;
+    while ((rMatch = rowRe.exec(sheetText)) !== null) {
+      var rowXml = rMatch[1];
+      var cells = [];
+      var cellRe = /<c\b([^>]*)>([\s\S]*?)<\/c>/g;
+      var cMatch;
+      while ((cMatch = cellRe.exec(rowXml)) !== null) {
+        var attrs = cMatch[1];
+        var refMatch = /r="([A-Z]+)\d+"/.exec(attrs);
+        var typeMatch = /t="(\w+)"/.exec(attrs);
+        var type = typeMatch ? typeMatch[1] : "";
+        var inner = cMatch[2];
+        var valueMatch = /<v>([\s\S]*?)<\/v>/.exec(inner);
+        var isMatch = /<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/.exec(inner);
+        var value = "";
+        if (type === "s" && valueMatch) {
+          value = shared[parseInt(valueMatch[1], 10)] || "";
+        } else if (type === "inlineStr" && isMatch) {
+          value = isMatch[1]
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">");
+        } else if (valueMatch) {
+          value = valueMatch[1];
+        }
+        cells.push({ ref: refMatch ? refMatch[1] : "", value: value });
+      }
+      cells.sort(function (a, b) {
+        return colIndex(a.ref) - colIndex(b.ref);
+      });
+      var rowArr = [];
+      cells.forEach(function (cell) {
+        if (cell.ref) {
+          var idx = colIndex(cell.ref) - 1;
+          while (rowArr.length < idx) rowArr.push("");
+          rowArr[idx] = cell.value;
+        } else {
+          rowArr.push(cell.value);
+        }
+      });
+      grid.push(rowArr);
+    }
+    return grid;
+  }
+
+  /* -- извлечение текста и генерация результата -- */
+  async function extractPlainText(source, bytes) {
+    switch (source) {
+      case "pdf":
+        return pdfToText(bytes);
+      case "docx":
+        return docxToText(bytes);
+      case "odt":
+        return odtToText(bytes);
+      case "doc": {
+        var parsed = rtfToText(latinDecode(bytes));
+        if (parsed.trim()) return parsed;
+        return docxToText(bytes);
+      }
+      case "txt":
+        return utf8Decode(bytes);
+      case "html":
+        return stripHtml(utf8Decode(bytes));
+      case "rtf":
+        return rtfToText(latinDecode(bytes));
+      case "md":
+        return markdownToText(utf8Decode(bytes));
+      case "csv":
+        return tableToCsv(parseCsv(utf8Decode(bytes)));
+      case "xlsx":
+        return tableToCsv(await xlsxToGrid(bytes));
+      default:
+        throw new Error("Чтение этого формата на устройстве пока недоступно.");
+    }
+  }
+
+  function buildResultFile(target, text, fileName) {
+    var title = String(fileName).replace(/\.[^.]+$/, "");
+    switch (target) {
+      case "txt":
+        return new Blob([text], { type: "text/plain;charset=utf-8" });
+      case "html":
+        return new Blob([textToHtml(text, title)], {
+          type: "text/html;charset=utf-8",
+        });
+      case "rtf":
+        return new Blob([textToRtf(text)], { type: "application/rtf" });
+      case "md":
+        return new Blob([textToMarkdown(text)], {
+          type: "text/markdown;charset=utf-8",
+        });
+      case "odt":
+        return buildOdt(text);
+      case "docx":
+        return buildDocx(title, text);
+      case "doc":
+        return new Blob([textToRtf(text)], { type: "application/msword" });
+      case "csv":
+        return new Blob([tableToCsv(parseCsv(text))], {
+          type: "text/csv;charset=utf-8",
+        });
+      case "xlsx":
+        return buildXlsx(parseCsv(text));
+      default:
+        throw new Error(
+          "Сохранение документа в формат " +
+            target.toUpperCase() +
+            " пока не поддерживается."
+        );
+    }
+  }
+
+  /* -- PDF → текст -- */
+  function decodePdfString(value) {
+    return String(value)
+      .replace(/\\([nrtbf()\\])/g, function (_m, ch) {
+        switch (ch) {
+          case "n":
+            return "\n";
+          case "r":
+            return "\r";
+          case "t":
+            return "\t";
+          case "b":
+            return "\b";
+          case "f":
+            return "\f";
+          default:
+            return ch;
+        }
+      })
+      .replace(/\\(\d{1,3})/g, function (_m, oct) {
+        return String.fromCharCode(parseInt(oct, 8));
+      });
+  }
+
+  function extractStringsFromContent(content) {
+    var strings = [];
+    var re = /\((?:[^()\\]|\\.)*\)/g;
+    var m;
+    while ((m = re.exec(content)) !== null) {
+      strings.push(decodePdfString(m[0].slice(1, -1)));
+    }
+    return strings;
+  }
+
+  function extractPdfText(content) {
+    var lines = [];
+    var btRe = /BT([\s\S]*?)ET/g;
+    var block;
+    while ((block = btRe.exec(content)) !== null) {
+      var body = block[1];
+      var segments = body.split(/\b(Td|TD|Tm|T\*)\b/);
+      for (var i = 0; i < segments.length; i++) {
+        var trimmed = segments[i].trim();
+        if (!trimmed) continue;
+        if (/^(Td|TD|Tm|T\*)$/.test(trimmed)) continue;
+        var joined = extractStringsFromContent(trimmed).join("");
+        if (joined) lines.push(joined);
+      }
+    }
+    return lines.join("\n").replace(/[ \t]+\n/g, "\n");
+  }
+
+  async function pdfToText(bytes) {
+    var text = latinDecode(bytes);
+    var objRe = /(\d+)\s+(\d+)\s+obj([\s\S]*?)endobj/g;
+    var streams = [];
+    var m;
+    while ((m = objRe.exec(text)) !== null) {
+      var body = m[3];
+      var streamMatch = /stream\r?\n([\s\S]*?)\r?\nendstream/.exec(body);
+      if (!streamMatch) continue;
+      var dictPart = body.slice(0, body.indexOf("stream"));
+      var filterFlate = /\/FlateDecode/.test(dictPart);
+      var rawBytes = new Uint8Array(streamMatch[1].length);
+      for (var i = 0; i < streamMatch[1].length; i++) {
+        rawBytes[i] = streamMatch[1].charCodeAt(i) & 0xff;
+      }
+      var decoded;
+      if (filterFlate) {
+        try {
+          decoded = await inflateDeflate(rawBytes);
+        } catch (e) {
+          continue;
+        }
+      } else {
+        decoded = rawBytes;
+      }
+      streams.push(latinDecode(decoded));
+    }
+    var allContent = streams.join("\n");
+    var extracted = extractPdfText(allContent);
+    if (!extracted.trim()) {
+      throw new Error(
+        "Не удалось извлечь текст из PDF. Возможно, это отсканированный документ."
+      );
+    }
+    return extracted;
+  }
+
+  function convertDocument(file, source, target) {
+    return file
+      .arrayBuffer()
+      .then(function (buf) {
+        return new Uint8Array(buf);
+      })
+      .then(async function (bytes) {
+        var text = await extractPlainText(source, bytes);
+        return buildResultFile(target, text, file.name);
+      });
   }
 
   function convertFile(file, categoryId, source, target) {
@@ -569,6 +1496,7 @@
     convertButton: document.getElementById("convert-button"),
     toast: document.getElementById("toast"),
     themeToggle: document.getElementById("theme-toggle"),
+    shareButton: document.getElementById("share-button"),
   };
 
   function currentCategory() {
@@ -788,6 +1716,8 @@
     state.source = "";
     state.sourceLocked = false;
     state.target = "";
+    setProgress(0);
+    hideProgress();
     clearResult();
     renderFormats();
   }
@@ -828,12 +1758,16 @@
     stopTimer();
     state.source = value;
     state.target = "";
+    setProgress(0);
+    hideProgress();
     clearResult();
     renderFormats();
   }
 
   function handleTargetChange() {
     state.target = el.targetSelect.value || "";
+    setProgress(0);
+    hideProgress();
     clearResult();
     updateConvertState();
   }
@@ -930,6 +1864,39 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Поделиться (Web Share API) и регистрация service worker
+   * ------------------------------------------------------------------ */
+  function initShare() {
+    if (!el.shareButton) return;
+    if (typeof navigator.share !== "function") {
+      el.shareButton.hidden = true;
+      return;
+    }
+    el.shareButton.hidden = false;
+    el.shareButton.addEventListener("click", function () {
+      navigator
+        .share({
+          title: document.title || "FORMATme",
+          text: "FORMATme — конвертируйте файлы прямо в браузере.",
+          url: window.location.href,
+        })
+        .catch(function (err) {
+          if (err && err.name === "AbortError") return;
+          showToast("Не удалось поделиться", true);
+        });
+    });
+  }
+
+  function initServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {
+        /* офлайн-режим недоступен (например, при открытии через file://) */
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
    * События
    * ------------------------------------------------------------------ */
   function bindEvents() {
@@ -983,6 +1950,8 @@
     renderFile();
     renderFormats();
     updateConvertState();
+    initShare();
+    initServiceWorker();
   }
 
   if (document.readyState === "loading") {
