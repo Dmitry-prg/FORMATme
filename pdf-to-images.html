@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF → изображения · FORMATme</title>
+    <meta
+      name="description"
+      content="Превратите страницы PDF в изображения PNG или JPG. Одна страница — одно изображение, несколько страниц — ZIP-архив. Обработка выполняется локально в браузере."
+    />
+    <meta name="application-name" content="FORMATme" />
+    <meta name="theme-color" content="#080b14" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="./icons/icon-192.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="./icons/icon-512.png"
+    />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="FORMATme" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">
+            <svg
+              class="icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
+              />
+              <path d="M20 3v4" />
+              <path d="M22 5h-4" />
+              <path d="M4 17v2" />
+              <path d="M5 18H3" />
+            </svg>
+          </span>
+          FORMATme
+        </a>
+        <button
+          id="install-btn"
+          type="button"
+          class="btn btn-outline btn-sm hidden"
+        >
+          <svg
+            class="icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M12 15V3" />
+          </svg>
+          Установить
+        </button>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-glow" aria-hidden="true"></div>
+
+      <div class="tool-page">
+        <div class="tool-heading-row">
+          <div class="tool-icon">
+            <svg
+              class="icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+              <circle cx="9" cy="9" r="2" />
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+            </svg>
+          </div>
+          <span class="badge badge-secondary">Локально в браузере</span>
+        </div>
+        <h1>PDF → изображения</h1>
+        <p>
+          Загрузите PDF-документ и получите изображения страниц: одна страница —
+          одно изображение, несколько страниц — ZIP-архив. Файлы не покидают
+          ваше устройство.
+        </p>
+
+        <div class="tool-stack" id="tool-root">
+          <section class="card">
+            <div class="card-header">
+              <h2 class="card-title">Шаг 1 · Загрузите PDF</h2>
+              <p class="card-description">
+                Выберите файл и укажите формат изображений. Обработка
+                выполняется локально в браузере.
+              </p>
+            </div>
+            <div class="card-content">
+              <div
+                class="dropzone"
+                id="dropzone"
+                role="button"
+                tabindex="0"
+                aria-label="Выберите PDF-файл или перетащите его сюда"
+              >
+                <div class="dropzone-icon">
+                  <svg
+                    class="icon"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+                    <path
+                      d="M4 22V4a2 2 0 0 1 2-2h8l6 6v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"
+                    />
+                    <path d="M12 18v-6" />
+                    <path d="M9 15h6" />
+                  </svg>
+                </div>
+                <div>
+                  <p class="dropzone-title">
+                    Выберите PDF-файл или перетащите его сюда
+                  </p>
+                  <p class="dropzone-hint">
+                    PDF — одна страница станет одним изображением, несколько
+                    страниц упакуются в ZIP
+                  </p>
+                </div>
+                <input
+                  class="file-input"
+                  id="file-input"
+                  type="file"
+                  accept="application/pdf,.pdf"
+                />
+              </div>
+
+              <div class="format-row">
+                <span class="format-label">Формат изображений:</span>
+                <div class="segmented" id="format-segmented">
+                  <button
+                    type="button"
+                    class="btn btn-ghost active"
+                    data-format="png"
+                  >
+                    PNG
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    data-format="jpeg"
+                  >
+                    JPG
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card hidden" id="convert-card">
+            <div class="card-header">
+              <h2 class="card-title">Шаг 2 · Конвертация</h2>
+              <p class="card-description" id="file-info"></p>
+            </div>
+            <div class="card-content">
+              <button id="convert-btn" type="button" class="btn btn-primary">
+                <svg
+                  class="icon"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+                Преобразовать в изображения
+              </button>
+            </div>
+          </section>
+
+          <section class="card hidden" id="progress-card">
+            <div class="card-content">
+              <div class="progress-wrap">
+                <div class="progress-status">
+                  <svg
+                    class="icon spin"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  <span id="progress-text">Обработка…</span>
+                </div>
+                <div class="track">
+                  <div class="bar" id="progress-bar" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card card-success hidden" id="result-card">
+            <div class="card-content result-center">
+              <div class="result-icon" id="result-icon"></div>
+              <div>
+                <p class="result-title" id="result-title"></p>
+                <p class="result-meta" id="result-meta"></p>
+              </div>
+              <div class="result-actions">
+                <a id="download-link" class="btn btn-primary" download></a>
+                <button id="reset-btn" type="button" class="btn btn-outline">
+                  Начать заново
+                </button>
+              </div>
+            </div>
+            <div class="card-content" id="previews-wrap"></div>
+          </section>
+
+          <section class="card card-error hidden" id="error-card">
+            <div class="card-content">
+              <p class="error-text" id="error-text"></p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        © <span data-year></span> FORMATme
+      </div>
+    </footer>
+
+    <div class="toast-viewport" id="toast-viewport" aria-live="polite"></div>
+
+    <script src="./js/app.js"></script>
+    <script src="./lib/pdf.min.js"></script>
+    <script src="./pdfjs/pdf.worker.min.js"></script>
+    <script src="./lib/fflate.js"></script>
+    <script src="./js/pdf-to-images.js"></script>
+  </body>
+</html>
