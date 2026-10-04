@@ -18,6 +18,10 @@
     archive:
       '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    share:
+      '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>',
   };
 
   var SVG_TEMPLATE =
@@ -124,9 +128,55 @@
     }
   }
 
+  function fallbackCopy(text) {
+    var textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      return true;
+    } catch (e) {
+      return false;
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+
+  function initShare() {
+    var btn = document.getElementById("share-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var url = window.location.href;
+      var title = document.title;
+      if (typeof navigator.share === "function") {
+        navigator.share({ title: title, url: url }).catch(function () {});
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard
+          .writeText(url)
+          .then(function () {
+            toast("Ссылка скопирована");
+          })
+          .catch(function () {
+            if (fallbackCopy(url)) toast("Ссылка скопирована");
+            else toast("Не удалось скопировать ссылку", "error");
+          });
+        return;
+      }
+      if (fallbackCopy(url)) toast("Ссылка скопирована");
+      else toast("Не удалось скопировать ссылку", "error");
+    });
+  }
+
   function init() {
     initFooterYear();
     initPwa();
+    initShare();
   }
 
   window.App = {

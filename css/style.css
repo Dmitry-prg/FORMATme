@@ -119,24 +119,40 @@ p {
   gap: 0.75rem;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.header-back,
+.header-btn {
+  flex-shrink: 0;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .brand-mark {
-  display: flex;
+  display: block;
   height: 2rem;
   width: 2rem;
-  align-items: center;
-  justify-content: center;
+  flex-shrink: 0;
   border-radius: 0.5rem;
-  background-color: var(--primary);
-  color: var(--primary-foreground);
 }
 
 /* ---------- Buttons ---------- */
@@ -202,6 +218,13 @@ p {
   padding: 0.375rem;
 }
 
+.btn-arrow {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+
 .btn .icon {
   flex-shrink: 0;
 }
@@ -230,25 +253,6 @@ p {
   border-color: transparent;
   background-color: var(--secondary);
   color: var(--secondary-foreground);
-}
-
-.pulse-dot {
-  display: inline-block;
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 9999px;
-  background-color: #34d399;
-  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
 }
 
 /* ---------- Cards ---------- */
@@ -402,42 +406,6 @@ p {
   margin-top: 0.75rem;
 }
 
-.steps {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-
-.steps li {
-  display: flex;
-  gap: 0.75rem;
-  font-size: 0.875rem;
-}
-
-.step-num {
-  margin-top: 0.125rem;
-  display: flex;
-  height: 1.25rem;
-  width: 1.25rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border: 1px solid var(--border);
-  background-color: color-mix(in srgb, var(--muted) 40%, transparent);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted-foreground);
-}
-
-.steps li span:last-child {
-  color: var(--muted-foreground);
-}
-
 .card-footer-row {
   display: flex;
   align-items: center;
@@ -448,66 +416,6 @@ p {
 .formats {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--muted-foreground);
-}
-
-.how-it-works {
-  margin: 0 auto;
-  max-width: 64rem;
-  padding: 0 1rem 5rem;
-}
-
-.how-box {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background-color: color-mix(in srgb, var(--card) 50%, transparent);
-  padding: 1.5rem;
-}
-
-.how-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.how-title .icon {
-  color: var(--primary);
-}
-
-.how-grid {
-  margin-top: 1.25rem;
-  display: grid;
-  gap: 1.5rem;
-}
-
-@media (min-width: 640px) {
-  .how-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.how-item {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.how-item .step-num {
-  height: 1.75rem;
-  width: 1.75rem;
-  margin-top: 0;
-  font-size: 0.75rem;
-}
-
-.how-item h3 {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.how-item p {
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
   color: var(--muted-foreground);
 }
 

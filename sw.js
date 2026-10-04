@@ -1,4 +1,4 @@
-const CACHE_NAME = "formatme-delivery-v1";
+const CACHE_NAME = "formatme-delivery-v3";
 
 const SHELL_URLS = [
   "./index.html",
@@ -13,6 +13,7 @@ const SHELL_URLS = [
   "./lib/pdf.min.js",
   "./pdfjs/pdf.worker.min.js",
   "./manifest.webmanifest",
+  "./logo.gif",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/maskable-512.png",
